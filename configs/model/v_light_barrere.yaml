@@ -1,0 +1,48 @@
+_target_: src.models.hybrid_module.HybridModule
+# Accessing to data in configs/train_htr.yaml
+datasets: ${data}
+_logger: ${logger}
+tokenizer: ${tokenizer}
+
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  # weight_decay: 0.001
+
+log_val_metrics: false
+
+# scheduler: null
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.SequentialLR
+  _partial_: true
+  milestones: [4000]
+  schedulers: 
+    - _target_: torch.optim.lr_scheduler.LinearLR
+      _partial_: true
+      start_factor: 0.001
+      total_iters: 4000
+      # optimizer: scheduler.optimizer
+
+    - _target_: torch.optim.lr_scheduler.ExponentialLR
+      _partial_: true
+      gamma: 0.999999
+      # optimizer: scheduler.optimizer
+  verbose: true
+
+
+net: 
+  _target_: src.models.components.v_light_barrere.V_Light_Barrere
+  image_size: ${data.train.train_config.img_size}
+  hidden_dim: 256
+  intermediate_ffn_dim: 1024
+  dropout: 0.2
+  n_heads: 4
+  encoder_layers: 4
+  decoder_layers: 2
+  char_embedding_size: 256
+  tokenizer: ${tokenizer}
+
+compile: false

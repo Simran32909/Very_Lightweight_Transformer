@@ -1,0 +1,15 @@
+defaults: 
+  - train_config: train
+  - train_config/transforms: real_transformations
+
+# Put your dataset configs here
+train_config:
+  _target_: src.data.data_config.DataConfig
+  stage: train
+  img_size: [64,256]
+  binarize: True
+  batch_size: 128
+  num_workers: 4
+  pin_memory: True
+  vocab_path: ${paths.data_dir}/vocab.txt
+  

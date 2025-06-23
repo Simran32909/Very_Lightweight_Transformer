@@ -1,0 +1,7 @@
+# @package _group_
+_target_: src.data.data_config.DatasetConfig
+name: sharada
+images_path: ???
+labels_path: ???
+splits_path: ???
+read_data: read_data_sharada # A new function that will need to be implemented 

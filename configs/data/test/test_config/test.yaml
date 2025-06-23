@@ -1,0 +1,4 @@
+# Create a yaml with defaults using DataConfig
+defaults:
+  - datasets: # Contains DatasetConfig
+    - sharada
