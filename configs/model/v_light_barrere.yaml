@@ -35,7 +35,7 @@ scheduler:
 
 net: 
   _target_: src.models.components.v_light_barrere.V_Light_Barrere
-  image_size: ${data.train.train_config.img_size}
+  image_size: ${data.train_config.img_size}
   hidden_dim: 256
   intermediate_ffn_dim: 1024
   dropout: 0.2

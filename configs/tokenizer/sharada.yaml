@@ -1,0 +1,3 @@
+_target_: src.data.components.tokenizers.CharTokenizer
+model_name: "sharada_tokenizer"
+vocab_file: configs/tokenizer/sharada_vocab.txt 

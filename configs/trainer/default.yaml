@@ -1,21 +1,27 @@
+# @package _group_
+
+# Hydra will instantiate this class as the trainer
 _target_: lightning.pytorch.trainer.Trainer
 
+# Where Lightning saves logs / checkpoints if the logger
+# doesn’t specify its own root directory
 default_root_dir: ${paths.output_dir}
 
-min_epochs: 1 # prevents early stopping
+# Epoch limits
+min_epochs: 1          # prevents early stopping in the first epoch
 max_epochs: 100
-# overfit_batches: 1 # runs all data in 1 batch
 
+# Device setup – single-GPU by default; other yaml files
+# (e.g. multi_gpu.yaml) can override `devices`
 accelerator: gpu
 devices: 1
 
-# mixed precision for extra speed-up
+# Mixed precision (commented out; enable if you want fp16/bf16)
 # precision: 16
 
-# perform a validation loop every N training epochs
+# Validation settings
 check_val_every_n_epoch: 1
 num_sanity_val_steps: 0
 
-# set True to to ensure deterministic results
-# makes training slower but gives more reproducibility than just setting seeds
+# Make training deterministic / reproducible
 deterministic: True

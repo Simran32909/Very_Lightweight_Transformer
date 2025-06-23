@@ -1,0 +1,16 @@
+# @package _global_
+
+# This file defines the 'sharada' experiment.
+# It overrides the default data, tokenizer, and trainer configs.
+
+defaults:
+  - override /data: sharada
+  - override /tokenizer: sharada
+  - override /trainer: multi_gpu
+  - _self_
+
+# Add tags for this experiment to distinguish it in logs
+tags: ["sharada", "multi_gpu"]
+
+# You can add other experiment-specific overrides here
+seed: 42 

@@ -9,7 +9,14 @@ from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler, RandomS
 from unidecode import unidecode
 
 # Import data_config
-from src.data.data_config import DataConfig, DatasetConfig, SynthDatasetConfig, RandomSynthDatasetConfig
+from src.data.data_config import (
+    DataConfig,
+    DatasetConfig,
+    SynthDatasetConfig,
+    RandomSynthDatasetConfig,
+    SharadaDatasetConfig,
+)
+from src.data.sharada_dataset import SharadaDataset
 
 # Import tokenizer
 from src.data.components.tokenizers import Tokenizer
@@ -235,6 +242,7 @@ class HTRDataModule(pl.LightningDataModule):
         pl.seed_everything(self.seed, workers=True)
         torch.manual_seed(self.seed)
         self.vocab_size = tokenizer.vocab_size
+        self.vocab = tokenizer.vocab if hasattr(tokenizer, 'vocab') else []
         self.text_transform = tokenizer.tokenize       
 
         # print(f'Constructing HTRDataModule with vocab {self.vocab}')
@@ -251,7 +259,7 @@ class HTRDataModule(pl.LightningDataModule):
         pass
        
     def setup(self, stage: str):
-        print(f'Print train_config transforms: {self.train_config.transforms[0]}')
+        # print(f'Print train_config transforms: {self.train_config.transforms[0]}')
         self.stage = stage
         print(f'Setting up stage {stage}...')
 
@@ -268,40 +276,52 @@ class HTRDataModule(pl.LightningDataModule):
             self.__setattr__(_stage + "_sampler", None)
             
             print(f'CONFIGS: {configs[_stage]}')
+            # Safely obtain transform for this stage (can be None)
+            stage_transform = None
+            if hasattr(configs[_stage], 'transforms') and configs[_stage].transforms and len(configs[_stage].transforms) > 0:
+                stage_transform = configs[_stage].transforms[0]
+
             for dataset in configs[_stage].datasets:
-              ds = configs[_stage].datasets[dataset]
-              
-              print(f'DATASET: {ds}')
+                ds = configs[_stage].datasets[dataset]
+                
+                print(f'DATASET: {ds}')
 
-              # Check type of instance
-              if isinstance(ds, DatasetConfig): # Real dataset
-                  read_data = hydra.utils.get_method(ds.read_data)
+                # Check type of instance by its _target_ path
+                if ds._target_ == 'src.data.data_config.DatasetConfig': # Real dataset
+                    read_data = hydra.utils.get_method(ds.read_data)
 
-                  # Check if splits_paths corresponds to stage separated in two lines
-                  assert ds.splits_path.split("/")[-1] == _stage + ".txt", \
-                    f'File {ds.splits_path} does not correspond to stage {_stage}'
-                  
-                  with open(ds.splits_path, "r") as f:
-                      setfiles = f.read().splitlines()
-                  images_paths, words = read_data(ds.images_path, ds.labels_path, setfiles)
-                  print(f'Binarize: {configs[_stage].binarize}')
-                  htr_dataset = HTRDataset(images_paths, words, binarize=configs[_stage].binarize, transform=configs[_stage].transforms[0])
+                    # Check if splits_paths corresponds to stage separated in two lines
+                    assert ds.splits_path.split("/")[-1] == _stage + ".txt", \
+                      f'File {ds.splits_path} does not correspond to stage {_stage}'
+                    
+                    with open(ds.splits_path, "r") as f:
+                        setfiles = f.read().splitlines()
+                    images_paths, words = read_data(ds.images_path, ds.labels_path, setfiles)
+                    print(f'Binarize: {configs[_stage].binarize}')
+                    htr_dataset = HTRDataset(images_paths, words, binarize=configs[_stage].binarize, transform=stage_transform)
 
-              elif isinstance(ds, SynthDatasetConfig):
-                  # Read all sequences from dataset path
-                  sequences = open(ds.words_path, "r").read().split("\n")
-                  print(f'Number of sequences in dataset {dataset}: {len(sequences)} in stage {_stage}')
-                  real_distr = [1/len(sequences)] * len(sequences) # Balancing not used. Uniform distribution
-                  distr = real_distr
-                  htr_dataset = HTRDatasetSynth(sequences, distr, ds.fonts_path, transform=configs[_stage].transforms[0])
-              
-              elif isinstance(ds, RandomSynthDatasetConfig):
-                  htr_dataset =  HTRDatasetSynthRandom(self.vocab[5:], ds.words_to_generate, ds.max_len, ds.fonts_path, transform=configs[_stage].transforms[0])
-                  print(f'Generating data with vocab {self.vocab[5:]}') # Remove special tokens from vocab and whitespace
+                elif ds._target_ == 'src.data.data_config.SynthDatasetConfig':
+                    # Read all sequences from dataset path
+                    sequences = open(ds.words_path, "r").read().split("\n")
+                    print(f'Number of sequences in dataset {dataset}: {len(sequences)} in stage {_stage}')
+                    real_distr = [1/len(sequences)] * len(sequences) # Balancing not used. Uniform distribution
+                    distr = real_distr
+                    htr_dataset = HTRDatasetSynth(sequences, distr, ds.fonts_path, transform=stage_transform)
+                
+                elif ds._target_ == 'src.data.data_config.RandomSynthDatasetConfig':
+                    htr_dataset = HTRDatasetSynthRandom(self.vocab[5:], ds.words_to_generate, ds.max_len, ds.fonts_path, transform=stage_transform)
+                    print(f'Generating data with vocab {self.vocab[5:]}') # Remove special tokens from vocab and whitespace
 
-              print(f'Number of samples in dataset {dataset}: {len(htr_dataset)} in stage {_stage}')
+                elif ds._target_ == 'src.data.data_config.SharadaDatasetConfig':
+                    htr_dataset = SharadaDataset(
+                        data_dir=ds.data_dir,
+                        split_file_path=ds.split_file_path,
+                        transforms=stage_transform,
+                    )
 
-              stage_datasets[_stage].append(htr_dataset)
+                print(f'Number of samples in dataset {dataset}: {len(htr_dataset)} in stage {_stage}')
+
+                stage_datasets[_stage].append(htr_dataset)
 
             # Concatenate datasets if more than one
             if _stage == "train" and len(stage_datasets[_stage]) > 1:
@@ -344,7 +364,7 @@ class HTRDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.val_config.num_workers,
             pin_memory=self.val_config.pin_memory,
-            collate_fn=lambda batch: collate_fn(batch, img_size=self.train_config.img_size, text_transform=self.text_transform),
+            collate_fn=lambda batch: collate_fn(batch, img_size=self.val_config.img_size, text_transform=self.text_transform),
             sampler=self.val_sampler if self.val_sampler is not None else None
         ) for dataset in self.val_dataset] 
         # ) for dataset in [self.train_dataset]] # For overfitting/debugging purposes
@@ -356,7 +376,7 @@ class HTRDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.test_config.num_workers,
             pin_memory=self.test_config.pin_memory,
-            collate_fn=lambda batch: collate_fn(batch, img_size=self.train_config.img_size, text_transform=self.text_transform),
+            collate_fn=lambda batch: collate_fn(batch, img_size=self.test_config.img_size, text_transform=self.text_transform),
             sampler=self.test_sampler if self.test_sampler is not None else None
         ) for dataset in self.test_dataset]
     

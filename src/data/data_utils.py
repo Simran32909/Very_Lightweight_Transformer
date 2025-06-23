@@ -24,6 +24,7 @@ def read_htr_fonts(fonts_path):
     
 def collate_fn(batch, img_size, text_transform):
     sequences_batch = []
+    target_lengths = []  # To store the length of each sequence
     images_shapes = torch.tensor([image_sample.shape for image_sample, seq_sample in batch]) # Get shapes of images in batch [B, C, H, W]
     all_height_ratios = (images_shapes[:, 1] / img_size[0]) # Get height ratios for all images in batch
     all_width_reescaled = images_shapes[:, 2] / all_height_ratios # Get width reescaled for all images in batch
@@ -50,12 +51,15 @@ def collate_fn(batch, img_size, text_transform):
       padded_columns[i] = padding_added
 
       # print(f'Seq sample: {seq_sample}')
-      sequences_batch.append(text_transform(seq_sample))
+      tokenized_sequence = text_transform(seq_sample)
+      sequences_batch.append(tokenized_sequence)
+      target_lengths.append(len(tokenized_sequence))
 
     sequences_batch = pad_sequence(sequences_batch, padding_value=PAD_IDX)
-    assert images_batch.shape[0] == sequences_batch.shape[1] == padded_columns.shape[0], "Batch size of images and sequences should be equal"
+    target_lengths = torch.tensor(target_lengths, dtype=torch.long)
+    assert images_batch.shape[0] == sequences_batch.shape[1] == padded_columns.shape[0] == target_lengths.shape[0], "Batch size of images, sequences, and lengths should be equal"
     
-    return images_batch, sequences_batch, padded_columns
+    return images_batch, sequences_batch, target_lengths, padded_columns
   
 def has_glyph(font, glyph):
     # print(font['cmap'])

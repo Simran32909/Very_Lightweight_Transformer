@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from dataclasses import dataclass, field
 
 @dataclass
@@ -27,14 +27,20 @@ class DatasetConfig:
   read_data: str = field(default='read_data')
 
 @dataclass
+class SharadaDatasetConfig:
+  _target_: str = field(default='src.data.data_config.SharadaDatasetConfig')
+  name: str = field(default="")
+  data_dir: str = field(default="")
+  split_file_path: str = field(default="")
+
+@dataclass
 class DataConfig:
-  _target_: str = field(default='src.data.data_config.DataConfig')
   stage: str = field(default='train')
   img_size: tuple = field(default=(64, 1024))
   binarize: bool = field(default=True)
   batch_size: int = field(default=64)
   num_workers: int = field(default=4)
   pin_memory: bool = field(default=True)
-  datasets: List[DatasetConfig] = field(default_factory=list)
+  datasets: Dict[str, DatasetConfig] = field(default_factory=dict)
   vocab_path: str = field(default='vocab.txt')
   transforms: List = field(default_factory=list)

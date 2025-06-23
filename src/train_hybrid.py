@@ -47,13 +47,13 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     log.info("Instantiating DataModule...")
     data_configs = instantiate_data_configs(cfg.get("data"))
     log.info(f'TRAIN, VAL, TEST DATA_CONFIGS INSTANTIATED: {data_configs}')
-    log.info(f'TRAIN: {data_configs["train"]}')
-    log.info(f'VAL: {data_configs["val"]}')
-    log.info(f'TEST: {data_configs["test"]}')
+    log.info(f'TRAIN: {data_configs["train_config"]}')
+    log.info(f'VAL: {data_configs["val_config"]}')
+    log.info(f'TEST: {data_configs["test_config"]}')
 
     # Update wandb logger with data config
     logger[0].experiment.config.update(
-        OmegaConf.to_object(cfg.get("data").get("train"))
+        OmegaConf.to_object(cfg.get("data").get("train_config"))
     )
 
     # Instantiating tokenizer
@@ -65,9 +65,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     # Init data module
     log.info("Instantiating DataModule...")
     datamodule: LightningDataModule = HTRDataModule(
-        train_config=data_configs["train"],
-        val_config=data_configs["val"],
-        test_config=data_configs["test"],
+        train_config=data_configs["train_config"],
+        val_config=data_configs["val_config"],
+        test_config=data_configs["test_config"],
         tokenizer=tokenizer,
         seed=cfg.get("seed"),
     )
@@ -85,14 +85,15 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     print(f'MODEL INSTANTIATED: {model}')
 
     # Update wandb logger with model config
-    logger[0].experiment.config.update(
+    """logger[0].experiment.config.update(
         OmegaConf.to_object(cfg.model)
-    )
+    )"""
 
     # Predict on test set
     log.info("Predicting on test set...")
+    trainer_cfg = cfg.get("trainer")
     trainer: Trainer = hydra.utils.instantiate(
-        cfg.trainer, logger=logger, callbacks=instantiate_callbacks(cfg.get("callbacks"))
+        trainer_cfg, logger=logger, callbacks=instantiate_callbacks(cfg.get("callbacks"))
     )
 
     # Load from a pretrained_checkpoint

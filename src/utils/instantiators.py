@@ -24,8 +24,7 @@ def instantiate_data_config(data_cfg: DictConfig) -> DataConfig:
     if not isinstance(data_cfg, DictConfig):
         raise TypeError("Data config must be a DictConfig!")
     
-    log.info(f"Instantiating ALL data config <{data_cfg}>")
-    log.info(f"Instantiating data config <{data_cfg._target_}>")
+    log.info(f"Instantiating data config <{data_cfg}>")
     # Instantiate each inside dataset config if it exists
     if "datasets" in data_cfg:
         datasets: dict = {}
@@ -35,7 +34,7 @@ def instantiate_data_config(data_cfg: DictConfig) -> DataConfig:
                 inst_dataset = hydra.utils.instantiate(data_cfg.datasets[dataset], _recursive_=False)
                 datasets[dataset] = inst_dataset
         data_cfg.datasets = datasets
-        data_config = hydra.utils.instantiate(data_cfg, _convert_="partial", _recursive_=True)
+        data_config = hydra.utils.instantiate(data_cfg, _recursive_=False)
     else:
         log.warning("No data config found! Skipping...")
         raise ValueError("No data config found!")
@@ -61,11 +60,11 @@ def instantiate_data_configs(data_cfg: DictConfig) -> dict:
 
     data_configs = {}
     
-    print(f'Stages in data config: {data_cfg.keys()}')
-    # Instantiate data config for training, validation and testing
-    for stage in data_cfg.keys():
-        if stage in data_cfg:
-            data_configs[stage] = instantiate_data_config(data_cfg[stage][stage+"_config"])
+    # The data_cfg contains train_config, val_config, test_config directly
+    for config_name in ["train_config", "val_config", "test_config"]:
+        if config_name in data_cfg:
+            log.info(f"Instantiating data config for <{config_name}>")
+            data_configs[config_name] = instantiate_data_config(data_cfg[config_name])
 
     return data_configs
 

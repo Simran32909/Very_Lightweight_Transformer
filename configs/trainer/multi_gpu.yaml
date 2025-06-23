@@ -1,0 +1,10 @@
+# Properly inherit from ddp.yaml without using @package _global_
+
+_target_: lightning.pytorch.trainer.Trainer
+
+# Use 2 GPUs on a single node
+strategy: ddp
+accelerator: gpu
+devices: [0, 1]
+num_nodes: 1
+sync_batchnorm: True 

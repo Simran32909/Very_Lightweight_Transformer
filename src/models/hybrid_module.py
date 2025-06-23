@@ -32,9 +32,9 @@ class HybridModule(LightningModule):
         self.log_val_metrics = log_val_metrics
 
         # Save datasets names in a list to index from validation_step
-        self.train_datasets = list(datasets['train']['train_config']['datasets'].keys())
-        self.val_datasets = list(datasets['val']['val_config']['datasets'].keys())
-        self.test_datasets = list(datasets['test']['test_config']['datasets'].keys())
+        self.train_datasets = list(datasets['train_config']['datasets'].keys())
+        self.val_datasets   = list(datasets['val_config'  ]['datasets'].keys())
+        self.test_datasets  = list(datasets['test_config' ]['datasets'].keys())
 
         print(f'self.train_datasets: {self.train_datasets}')
         print(f'self.val_datasets: {self.val_datasets}')
@@ -105,7 +105,7 @@ class HybridModule(LightningModule):
         :return: A tensor of losses between model predictions and targets.
         
         """
-        images, labels, padded_cols = batch[0], batch[1], batch[2]
+        images, labels, target_lengths, padded_cols = batch[0], batch[1], batch[2], batch[3]
         if self.current_epoch == 0 and self.global_step <= 1:
           str_train_datasets = f'train_' + ', '.join(self.train_datasets)
           self.metric_logger.log_images(images, str_train_datasets)
@@ -115,7 +115,7 @@ class HybridModule(LightningModule):
         enc_outputs, dec_outputs = self.net(x=images, y=labels[:, :-1])
         labels = labels[:, 1:].contiguous() # Shift all labels to the right to remove the <bos> token
         input_lengths = torch.ones(images.shape[0], dtype=torch.long).to(images.device) * enc_outputs.shape[0]
-        target_lengths = torch.where(labels == self.tokenizer.eos_id)[1]
+        # target_lengths is now passed directly from the collate function
         outputs = dec_outputs
         
         # Check if outputs is an instance of Hugging Face ModelOutput
@@ -153,7 +153,7 @@ class HybridModule(LightningModule):
         step = self.global_step
         self.log(f'training/lr_step', lr, sync_dist=True, on_step=True, on_epoch=False, prog_bar=True)
         
-        return loss 
+        return loss
 
     def on_train_epoch_end(self) -> None:
         "Lightning hook that is called when a training epoch ends."
@@ -177,7 +177,7 @@ class HybridModule(LightningModule):
         dataset = self.val_datasets[dataloader_idx]
         epoch = self.current_epoch
 
-        images, labels = batch[0], batch[1]
+        images, labels, _, _ = batch[0], batch[1], batch[2], batch[3]
         labels = labels.permute(1, 0).type(torch.LongTensor)
         labels = labels[:, 1:].contiguous() # Shift all labels to the right
 
@@ -210,11 +210,6 @@ class HybridModule(LightningModule):
           self.metric_logger_minusc.log_val_step_wer(_pred_minus, _label_minus, f'{dataset}_minusc')
 
           cer = CER()(_pred, _label)
-          
-          # if batch_idx < 1:
-          #   print(f'VAL Label: {_label}. Pred: {_pred}')
-            # self._logger.experiment.log({f'val/preds_{dataset}': wandb.Image(images[i], caption=f'Label: {_label} \n Pred: {_pred} \n CER: {cer} \n epoch: {self.current_epoch}')})
-
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
@@ -258,7 +253,6 @@ class HybridModule(LightningModule):
         self.metric_logger.update_epoch(self.current_epoch)
         self.metric_logger_minusc.update_epoch(self.current_epoch)
 
-
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, dataloader_idx: int = None) -> None:
         """Perform a single test step on a batch of data from the test set.
 
@@ -272,7 +266,7 @@ class HybridModule(LightningModule):
         # Get epoch
         epoch = self.current_epoch
 
-        images, labels = batch[0], batch[1]
+        images, labels, _, _ = batch[0], batch[1], batch[2], batch[3]
         # print(f'images.shape: {images.shape}')
         labels = labels.permute(1, 0).type(torch.LongTensor)
         labels = labels[:, 1:].contiguous() # Shift all labels to the right
@@ -304,8 +298,6 @@ class HybridModule(LightningModule):
           #   self._logger.experiment.log({f'test/preds_{dataset}': wandb.Image(images[i], caption=f'Label: {_label} \n Pred: {_pred} \n CER: {cer} \n epoch: {self.current_epoch}')})
 
           total_cer_per_batch += cer
-        
-        # print(f'Total CER per batch: {total_cer_per_batch/images.shape[0]}')
 
     def on_test_epoch_end(self) -> None:
         test_cer, test_wer = self.metric_logger.log_test_metrics()
