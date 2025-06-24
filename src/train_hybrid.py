@@ -81,13 +81,33 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     datamodule.setup(stage="test")
 
     print(f'Instantiating model...')
-    model: LightningModule = hydra.utils.instantiate(cfg.model)
+
+    # Manually instantiate model components to avoid Hydra recursively instantiating data configs
+    net = hydra.utils.instantiate(cfg.model.net)
+    optimizer_partial = hydra.utils.instantiate(cfg.model.optimizer)
+    scheduler_partial = hydra.utils.instantiate(cfg.model.scheduler)
+    # Instantiate logger mapping from logger config
+    logger_map = {}
+    for name, lg_conf in cfg.logger.items():
+        if isinstance(lg_conf, DictConfig) and "_target_" in lg_conf:
+            logger_map[name] = hydra.utils.instantiate(lg_conf)
+    # Create the model directly
+    model = HybridModule(
+        net=net,
+        optimizer=optimizer_partial,
+        scheduler=scheduler_partial,
+        compile=cfg.model.compile,
+        _logger=logger_map,
+        datasets=data_configs,
+        tokenizer=tokenizer,
+        log_val_metrics=cfg.model.log_val_metrics,
+    )
     print(f'MODEL INSTANTIATED: {model}')
 
     # Update wandb logger with model config
-    """logger[0].experiment.config.update(
+    logger[0].experiment.config.update(
         OmegaConf.to_object(cfg.model)
-    )"""
+    )
 
     # Predict on test set
     log.info("Predicting on test set...")

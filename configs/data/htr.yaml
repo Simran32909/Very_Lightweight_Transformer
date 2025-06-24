@@ -1,4 +1,36 @@
-defaults:
-  - train: train_config
-  - val: val_config
-  - test: test_config
+# Simple data configuration without nested instantiation
+train_config:
+  _target_: src.data.data_config.DataConfig
+  stage: train
+  img_size: [64, 1024]
+  binarize: true
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  datasets: {}
+  transforms:
+    - _target_: torchvision.transforms.ToTensor
+
+val_config:
+  _target_: src.data.data_config.DataConfig
+  stage: val
+  img_size: [64, 1024]
+  binarize: true
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  datasets: {}
+  transforms:
+    - _target_: torchvision.transforms.ToTensor
+
+test_config:
+  _target_: src.data.data_config.DataConfig
+  stage: test
+  img_size: [64, 1024]
+  binarize: true
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  datasets: {}
+  transforms:
+    - _target_: torchvision.transforms.ToTensor

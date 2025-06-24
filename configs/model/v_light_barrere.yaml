@@ -1,5 +1,5 @@
 _target_: src.models.hybrid_module.HybridModule
-# Accessing to data in configs/train_htr.yaml
+# Pass data config as reference without instantiation
 datasets: ${data}
 _logger: ${logger}
 tokenizer: ${tokenizer}
@@ -35,7 +35,7 @@ scheduler:
 
 net: 
   _target_: src.models.components.v_light_barrere.V_Light_Barrere
-  image_size: ${data.train_config.img_size}
+  image_size: [64, 1024]
   hidden_dim: 256
   intermediate_ffn_dim: 1024
   dropout: 0.2
