@@ -32,9 +32,17 @@ class HybridModule(LightningModule):
         self.log_val_metrics = log_val_metrics
 
         # Save datasets names in a list to index from validation_step
-        self.train_datasets = list(datasets['train_config']['datasets'].keys())
-        self.val_datasets   = list(datasets['val_config'  ]['datasets'].keys())
-        self.test_datasets  = list(datasets['test_config' ]['datasets'].keys())
+        # Handle both instantiated DataConfig objects and raw config dictionaries
+        if hasattr(datasets['train_config'], 'datasets'):
+            # Instantiated DataConfig objects
+            self.train_datasets = list(datasets['train_config'].datasets.keys())
+            self.val_datasets = list(datasets['val_config'].datasets.keys())
+            self.test_datasets = list(datasets['test_config'].datasets.keys())
+        else:
+            # Raw config dictionaries
+            self.train_datasets = list(datasets['train_config']['datasets'].keys())
+            self.val_datasets = list(datasets['val_config']['datasets'].keys())
+            self.test_datasets = list(datasets['test_config']['datasets'].keys())
 
         print(f'self.train_datasets: {self.train_datasets}')
         print(f'self.val_datasets: {self.val_datasets}')
@@ -114,8 +122,12 @@ class HybridModule(LightningModule):
  
         enc_outputs, dec_outputs = self.net(x=images, y=labels[:, :-1])
         labels = labels[:, 1:].contiguous() # Shift all labels to the right to remove the <bos> token
+        
+        # Recalculate target_lengths after shifting labels (remove BOS token)
+        target_lengths = torch.where(labels == self.tokenizer.eos_id)[1] + 1  # +1 because we want to include the EOS token
+        
+        # Calculate input lengths correctly - should be the sequence length (width dimension)
         input_lengths = torch.ones(images.shape[0], dtype=torch.long).to(images.device) * enc_outputs.shape[0]
-        # target_lengths is now passed directly from the collate function
         outputs = dec_outputs
         
         # Check if outputs is an instance of Hugging Face ModelOutput
@@ -131,22 +143,69 @@ class HybridModule(LightningModule):
         acc = (logits.argmax(dim=-1) == labels).sum() / (labels != self.tokenizer.pad_id).sum()
         self.metric_logger.log_train_step(loss, acc)
 
-        if batch_idx < 1:
-          for i in range(images.shape[0]):
-            # images_ = torchvision.transforms.ToPILImage()(images[i].detach().cpu())
-            _label = labels[i].detach().cpu().numpy().tolist()
-            _label = [label if label != -100 else self.tokenizer.pad_id for label in _label]
-            _pred = logits[i].argmax(-1).detach().cpu().numpy().tolist()
-            _label, _pred = self.tokenizer.detokenize(_label), self.tokenizer.detokenize(_pred)
-            cer = CER()(_pred, _label)
-            print(f'Label: {_label}. Pred: {_pred}. CER: {cer}')
+        # Calculate training CER for the entire batch
+        total_cer = 0.0
+        valid_samples = 0
+        
+        try:
+            for i in range(images.shape[0]):
+                _label = labels[i].detach().cpu().numpy().tolist()
+                _label = [label if label != -100 else self.tokenizer.pad_id for label in _label]
+                _pred = logits[i].argmax(-1).detach().cpu().numpy().tolist()
+                _label, _pred = self.tokenizer.detokenize(_label), self.tokenizer.detokenize(_pred)
+                
+                if _label and _pred:  # Only calculate CER if both label and prediction are not empty
+                    try:
+                        cer = CER()(_pred, _label)
+                        total_cer += cer
+                        valid_samples += 1
+                    except Exception as cer_error:
+                        print(f"Error with CER calculation: {cer_error}")
+                        # Fallback: simple character-level accuracy
+                        if len(_label) > 0:
+                            min_len = min(len(_pred), len(_label))
+                            if min_len > 0:
+                                matches = sum(1 for i in range(min_len) if _pred[i] == _label[i])
+                                cer = 1.0 - (matches / len(_label))
+                                total_cer += cer
+                                valid_samples += 1
+                    
+                    # Print first few samples for debugging
+                    if batch_idx < 1 and i < 3:
+                        print(f'Label: {_label}. Pred: {_pred}. CER: {cer}')
             
-            # self._logger.experiment.log({f'train/preds_{self.train_datasets[0]}': wandb.Image(images_, caption=f'Label: {_label} \n Pred: {_pred} \n CER: {cer} \n epoch: {self.current_epoch}')})
+            # Calculate average CER for the batch
+            avg_cer = total_cer / valid_samples if valid_samples > 0 else 0.0
+            
+            # Debug print for first few batches
+            if batch_idx < 3:
+                print(f'Batch {batch_idx}: valid_samples={valid_samples}, total_cer={total_cer:.4f}, avg_cer={avg_cer:.4f}')
+                
+        except Exception as e:
+            print(f"Error calculating CER: {e}")
+            avg_cer = 0.0
 
         # update and log metrics
         self.log("train/loss", loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
         self.log("train/loss_ce", loss_ce.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
         self.log("train/loss_ctc", loss_enc.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+        
+        # Log training CER with explicit sync_dist
+        self.log("train/cer", avg_cer, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        
+        # Test logging with a simple metric to verify logging works
+        self.log("train/test_metric", 0.5, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
+        
+        # Debug print for first few steps
+        if self.global_step < 10:
+            print(f'Step {self.global_step}: Logging train/cer = {avg_cer:.4f}')
+        
+        # Force log to wandb explicitly
+        if hasattr(self, 'loggers') and self.loggers:
+            for logger in self.loggers:
+                if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log'):
+                    logger.experiment.log({"train/cer": avg_cer}, step=self.global_step)
+                    print(f'Forced WandB log: train/cer = {avg_cer:.4f} at step {self.global_step}')
         
         # Log learning rate
         lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -164,6 +223,10 @@ class HybridModule(LightningModule):
         epoch = self.current_epoch
         print(f'Learning rate: {lr} for epoch: {epoch}')
         self.metric_logger.log_learning_rate(lr, epoch)
+        
+        # Log average training CER for the epoch
+        train_cer = self.trainer.callback_metrics.get('train/cer', 0.0)
+        print(f'Average training CER for epoch {epoch}: {train_cer:.4f}')
 
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, dataloader_idx: int = None) -> None:

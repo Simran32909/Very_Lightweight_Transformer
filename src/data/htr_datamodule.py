@@ -16,7 +16,6 @@ from src.data.data_config import (
     RandomSynthDatasetConfig,
     SharadaDatasetConfig,
 )
-from src.data.sharada_dataset import SharadaDataset
 
 # Import tokenizer
 from src.data.components.tokenizers import Tokenizer
@@ -279,7 +278,11 @@ class HTRDataModule(pl.LightningDataModule):
             # Safely obtain transform for this stage (can be None)
             stage_transform = None
             if hasattr(configs[_stage], 'transforms') and configs[_stage].transforms and len(configs[_stage].transforms) > 0:
-                stage_transform = configs[_stage].transforms[0]
+                # Instantiate the transform if it's a DictConfig with _target_
+                if hasattr(configs[_stage].transforms[0], '_target_'):
+                    stage_transform = hydra.utils.instantiate(configs[_stage].transforms[0])
+                else:
+                    stage_transform = configs[_stage].transforms[0]
 
             for dataset in configs[_stage].datasets:
                 ds = configs[_stage].datasets[dataset]
@@ -290,13 +293,17 @@ class HTRDataModule(pl.LightningDataModule):
                 if ds._target_ == 'src.data.data_config.DatasetConfig': # Real dataset
                     read_data = hydra.utils.get_method(ds.read_data)
 
-                    # Check if splits_paths corresponds to stage separated in two lines
-                    assert ds.splits_path.split("/")[-1] == _stage + ".txt", \
-                      f'File {ds.splits_path} does not correspond to stage {_stage}'
-                    
-                    with open(ds.splits_path, "r") as f:
-                        setfiles = f.read().splitlines()
-                    images_paths, words = read_data(ds.images_path, ds.labels_path, setfiles)
+                    # Support legacy TXT split lists and 1MSharada JSON split lists
+                    if 'read_data_1msharada' in ds.read_data:
+                        # ds.splits_path points directly to a JSON file containing a list of JSON annotation files
+                        images_paths, words = read_data(ds.splits_path)
+                    else:
+                        # Expect a text file with one id per line
+                        assert ds.splits_path.split("/")[-1] == _stage + ".txt", \
+                          f'File {ds.splits_path} does not correspond to stage {_stage}'
+                        with open(ds.splits_path, "r") as f:
+                            setfiles = f.read().splitlines()
+                        images_paths, words = read_data(ds.images_path, ds.labels_path, setfiles)
                     print(f'Binarize: {configs[_stage].binarize}')
                     htr_dataset = HTRDataset(images_paths, words, binarize=configs[_stage].binarize, transform=stage_transform)
 
@@ -313,11 +320,8 @@ class HTRDataModule(pl.LightningDataModule):
                     print(f'Generating data with vocab {self.vocab[5:]}') # Remove special tokens from vocab and whitespace
 
                 elif ds._target_ == 'src.data.data_config.SharadaDatasetConfig':
-                    htr_dataset = SharadaDataset(
-                        data_dir=ds.data_dir,
-                        split_file_path=ds.split_file_path,
-                        transforms=stage_transform,
-                    )
+                    # Optional external dataset class support; not used in current setup
+                    raise NotImplementedError('SharadaDatasetConfig path is not wired in this repo')
 
                 print(f'Number of samples in dataset {dataset}: {len(htr_dataset)} in stage {_stage}')
 
