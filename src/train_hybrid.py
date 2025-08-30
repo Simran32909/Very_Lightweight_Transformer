@@ -34,6 +34,7 @@ log = RankedLogger(__name__, rank_zero_only=True)
 
 @task_wrapper
 def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
+    from omegaconf import DictConfig
 
     # Set all seeds for reproducibility
     if cfg.get("seed"):
@@ -104,17 +105,46 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     )
     print(f'MODEL INSTANTIATED: {model}')
 
-    # Update wandb logger with model config
-    logger[0].experiment.config.update(
-        OmegaConf.to_object(cfg.model)
-    )
+    # Update wandb logger with model config (allowing value changes to avoid conflicts)
+    model_config = OmegaConf.to_object(cfg.model)
+    # Remove _target_ keys that cause conflicts
+    if '_target_' in model_config:
+        del model_config['_target_']
+    logger[0].experiment.config.update(model_config, allow_val_change=True)
 
     # Predict on test set
     log.info("Predicting on test set...")
+    print(f"Full config keys: {list(cfg.keys())}")
     trainer_cfg = cfg.get("trainer")
-    trainer: Trainer = hydra.utils.instantiate(
-        trainer_cfg, logger=logger, callbacks=instantiate_callbacks(cfg.get("callbacks"))
-    )
+    print(f"Trainer config: {trainer_cfg}")
+    print(f"Trainer config type: {type(trainer_cfg)}")
+    
+    if trainer_cfg is None:
+        print("Trainer config is None - creating default trainer config")
+        trainer_cfg = DictConfig({
+            "_target_": "lightning.pytorch.trainer.Trainer",
+            "default_root_dir": cfg.paths.output_dir,
+            "min_epochs": 1,
+            "max_epochs": 100,
+            "accelerator": "gpu",
+            "devices": 1,
+            "check_val_every_n_epoch": 1,
+            "num_sanity_val_steps": 0,
+            "deterministic": False
+        })
+    
+    print(f"Trainer config keys: {trainer_cfg.keys() if hasattr(trainer_cfg, 'keys') else 'No keys'}")
+    
+    try:
+        trainer: Trainer = hydra.utils.instantiate(
+            trainer_cfg, logger=logger, callbacks=instantiate_callbacks(cfg.get("callbacks"))
+        )
+        print(f"Trainer instantiated: {trainer}")
+        if trainer is None:
+            raise ValueError("Trainer instantiation failed - trainer is None")
+    except Exception as e:
+        print(f"Error instantiating trainer: {e}")
+        raise
 
     # Load from a pretrained_checkpoint
     ckpt_path = cfg.callbacks.model_checkpoint_base.dirpath + cfg.get("pretrained_checkpoint") + '.ckpt' if cfg.get("pretrained_checkpoint") else None
@@ -128,7 +158,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
         print(f'MODEL WILL BE TRAINED FROM SCRATCH: {model}')
         ckpt_path = None
       
-    model = HybridModule.load_from_checkpoint(ckpt_path, net=model.net, datasets=cfg.get("data"), tokenizer=tokenizer) if ckpt_path is not None else model
+    model = HybridModule.load_from_checkpoint(ckpt_path, net=model.net, datasets=data_configs, tokenizer=tokenizer) if ckpt_path is not None else model
     # model = torch.compile(model)
 
     if cfg.train is True:
@@ -139,6 +169,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
         print(f'MODEL WILL NOT BE TRAINED: {model}. Only testing will be performed.')
         trainer.validate(model, datamodule.val_dataloader())
         trainer.test(model, datamodule.test_dataloader())
+    
+    # Return empty dicts as expected by task_wrapper
+    return {}, {}
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train_htr.yaml")
 def main(cfg: DictConfig) -> Optional[float]:
