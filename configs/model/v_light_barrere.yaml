@@ -30,12 +30,11 @@ scheduler:
       _partial_: true
       gamma: 0.999999
       # optimizer: scheduler.optimizer
-  verbose: true
 
 
 net: 
   _target_: src.models.components.v_light_barrere.V_Light_Barrere
-  image_size: [64, 1024]
+  image_size: [68, 1800]
   hidden_dim: 256
   intermediate_ffn_dim: 1024
   dropout: 0.2
