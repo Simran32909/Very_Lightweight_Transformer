@@ -152,16 +152,60 @@ class V_Light_Barrere(nn.Module):
       self.img_reduction = (14, 9)
       print(f'IMAGE REDUCTION FACTOR: {self.img_reduction}')
 
-      # Dense layer to collapse the CNN output
+      # Calculate the CNN output size dynamically
+      # For the current architecture with kernel_size=(4,2) in conv5
+      # Calculate the final height after all convolutions and pooling
+      h = image_size[0]  # 68
+      w = image_size[1]  # 1800
       
-      self.collapse_layer = nn.Linear(1152, 128)
+      # Block 1: conv1 (3,3), no padding, stride 1
+      h = h - 3 + 1  # 68 - 3 + 1 = 66
+      w = w - 3 + 1  # 1800 - 3 + 1 = 1798
+      # Block 1: maxpool1 (2,2)
+      h = h // 2  # 66 // 2 = 33
+      w = w // 2  # 1798 // 2 = 899
+      
+      # Block 2: conv2 (3,3), no padding, stride 1
+      h = h - 3 + 1  # 33 - 3 + 1 = 31
+      w = w - 3 + 1  # 899 - 3 + 1 = 897
+      # Block 2: maxpool2 (2,2)
+      h = h // 2  # 31 // 2 = 15
+      w = w // 2  # 897 // 2 = 448
+      
+      # Block 3: conv3 (3,3), no padding, stride 1
+      h = h - 3 + 1  # 15 - 3 + 1 = 13
+      w = w - 3 + 1  # 448 - 3 + 1 = 446
+      # Block 3: maxpool3 (2,2)
+      h = h // 2  # 13 // 2 = 6
+      w = w // 2  # 446 // 2 = 223
+      
+      # Block 4: conv4 (3,3), no padding, stride 1
+      h = h - 3 + 1  # 6 - 3 + 1 = 4
+      w = w - 3 + 1  # 223 - 3 + 1 = 221
+      
+      # Block 5: conv5 (4,2), no padding, stride 1
+      h = h - 4 + 1  # 4 - 4 + 1 = 1
+      w = w - 2 + 1  # 221 - 2 + 1 = 220
+      
+      cnn_output_height = h  # 1
+      cnn_output_channels = 128
+      collapse_input_size = cnn_output_height * cnn_output_channels  # 1 * 128 = 128
+      
+      print(f"CNN output height: {cnn_output_height}, channels: {cnn_output_channels}")
+      print(f"Collapse layer input size: {collapse_input_size}")
+      
+      # Dense layer to collapse the CNN output
+      self.collapse_layer = nn.Linear(collapse_input_size, 128)
       self.layer_norm_collapse = nn.LayerNorm(128, elementwise_affine=False)
       self.dense = nn.Linear(128, hidden_dim)
       self.pred_ctc = nn.Linear(hidden_dim, self.vocab_size+1) # +1 for CTC blank token
 
-      self.pe_encoder = PositionalEncoding(hidden_dim)
-      self.pe_cross = PositionalEncoding(hidden_dim)
-      self.pe_decoder = PositionalEncoding(char_embedding_size)
+      # Calculate the maximum sequence length based on CNN output width
+      max_seq_len = w  # 220 for [68, 1800] input
+      
+      self.pe_encoder = PositionalEncoding(hidden_dim, max_len=max_seq_len)
+      self.pe_cross = PositionalEncoding(hidden_dim, max_len=max_seq_len)
+      self.pe_decoder = PositionalEncoding(char_embedding_size, max_len=max_seq_len)
 
       self.encoder = nn.TransformerEncoder(
         nn.TransformerEncoderLayer(
