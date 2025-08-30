@@ -196,3 +196,5 @@ cython_debug/
 data/
 logs/
 test_dataset.py
+
+checkpoints/
