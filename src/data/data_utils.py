@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import xml.etree.ElementTree as ET
 from torch.nn.utils.rnn import pad_sequence
 from typing import Iterable, List
+from typing import Tuple
 from fontTools.ttLib import TTFont
 import cv2
 import re
@@ -92,206 +93,6 @@ def generate_image(sequence, font, background_color=(255, 255, 255), text_color=
 
     return img
 
-def read_data_IAM(images_path, lines_path, files):
-    # Read lines from XML files
-    images_paths, lines = [], []
-    # print(f'Files {files}')
-    for file in files:
-      filepath = lines_path + file + ".xml"
-      tree = ET.parse(filepath)
-      root = tree.getroot()
-      root_image = file.split("-")[0] + '/'
-
-      # Get the lines
-      for line in root.iter("line"):
-        text, image_id = line.attrib.get("text"), line.attrib.get("id")
-        # Replace &quot with "
-        text = text.replace("&quot;", "\"")
-        image_path = images_path + '/' + root_image + "-".join(image_id.split("-")[:2]) + "/" + image_id + ".png"
-
-          # Check if image_path exists
-        if os.path.exists(image_path):
-            images_paths.append(image_path)
-            lines.append(text)
-
-    return images_paths, lines
-
-def read_data_rimes(images_path, lines_path, files):
-  # Read files from .txt files
-  images_paths, lines = [], []
-
-  for file in files:
-    image_path = images_path + file + ".jpg"
-    line_path = lines_path + file + ".txt"
-
-    # Read lines from .txt files
-    with open(line_path, "r") as f:
-      line = f.read().replace("\n", "")
-      line = line.replace("°", ".")
-      line = line.replace("œ", "oe")
-      line = line.replace("¤", "")
-      line = line.replace(" €", "€")
-      
-      lines.append(line)
-      images_paths.append(image_path)
-    
-  return images_paths, lines
-
-def read_data_bentham(images_path, lines_path, files):
-  images_paths, lines = [], []
-
-  for file in files:
-    image_path = images_path + file + ".png"
-    line_path = lines_path + file + ".txt"
-
-    # Read lines from .txt files
-    with open(line_path, "r") as f:
-      line = f.read().replace("\n", "")
-      line = line.replace("§", "S")
-      line = line.replace("|", " ")
-      
-      # Regex for bentham
-      line = re.sub(r'(\w)\s([,\.\!\:;\?])', '\g<1>\g<2>', line)  # noqa
-      line = re.sub(r'(["\'\(\[<])\s(\w+)', '\g<1>\g<2>', line)  # noqa
-      line = re.sub(r'(\w+)\s([\)\]>])', '\g<1>\g<2>', line)  # noqa
-      line = re.sub(r'\s+', ' ', line)  # noqa
-      
-      lines.append(line)
-      images_paths.append(image_path)
-
-  return images_paths, lines
-
-def convert_text_washington(text):
-    text = text.replace("-", "").replace("|", " ")
-    text = text.replace("s_pt", ".").replace("s_cm", ",")
-    text = text.replace("s_mi", "-").replace("s_qo", ":")
-    text = text.replace("s_sq", ";").replace("s_et", "V")
-    text = text.replace("s_bl", "(").replace("s_br", ")")
-    text = text.replace("s_qt", "'").replace("s_GW", "G.W.")
-    text = text.replace("s_", "")
-    return text
-
-def read_data_washington(images_path, lines_paths, files):
-  images_paths, lines = [], []
-
-  # Convert files list to a set
-  files = set(files)
-
-  # Read words from word_labels.txt
-  with open(lines_paths + "transcription.txt", "r") as f:
-    for line in f:
-      image_id, text = line.split(" ")
-
-      # Remove \n if exists in the text
-      text = text.replace("\n", "")
-      file = image_id 
-
-      # Check if first_part is in files
-      if file in files:
-        image_path = images_path + image_id + ".png"
-        text = convert_text_washington(text)
-
-        # Check if image_path exists
-        if os.path.exists(image_path):
-            images_paths.append(image_path)
-            lines.append(text)
-
-  return images_paths, lines
-
-def read_data_saint_gall(images_path, lines_paths, files):
-  images_paths, lines = [], []
-
-  # Convert files list to a set
-  files = set(files)
-
-  # Read words from transcriptions.txt
-  with open(lines_paths + "transcription.txt", "r") as f:
-    for line in f:
-      image_id, text = line.split(" ")[0], line.split(" ")[1]
-      file = '-'.join(image_id.split('-')[:2]) # Get first two parts of the image_id that corresponds to a line
-      image_path = images_path + image_id + ".png"
-      text = text.replace("\n", "")
-      text = text.replace("-", "").replace("|", " ")
-      text = text.replace("s_pt", ".").replace("s_cm", ",")
-
-      # Check if folder is in files 
-      if file in files:
-        images_paths.append(image_path)
-        lines.append(text)
-
-  return images_paths, lines
-
-def read_data_rodrigo(images_path, lines_paths, files):
-    images_paths, lines = [], []
-
-    # Convert files list to a set
-    files = set(files)
-
-    # Read words from word_labels.txt
-    with open(lines_paths + "transcriptions.txt", "r") as f:
-      for line in f:
-        # Rodrigo_00006_00 blablabla
-        image_id, text = line[:16], line[17:]
-
-        # Remove \n if exists in the text
-        text = text.replace("\n", "")
-        text = text.replace("♦", "")
-        text = text.replace("\\", "")
-        text = text.replace("|", "")
-        text = text.replace("þ", "p")
-        text = text.replace("Þ", "p")
-        text = text.replace("¶", "C")
-        text = text.replace("Ⴒ", "p")
-        text = text.replace("ք", "p")
-        text = text.replace("℣", "v")
-        
-        file = image_id
-
-        # Check if first_part is in files
-        if file in files:
-          image_path = images_path + image_id + ".png"
-
-          # Check if image_path exists
-          if os.path.exists(image_path):
-            images_paths.append(image_path)
-            lines.append(text)
-
-    return images_paths, lines
-
-def read_data_icfhr_2016(images_path, lines_paths, files):
-  images_paths, lines = [], []
-
-  print(f'Files {files}')
-
-  # Convert files list to a set
-  files = set(files)
-
-  # Read words from word_labels.txt
-  with open(lines_paths + "transcriptions.txt", "r") as f:
-    for line in f:
-      image_id, text = line.split(" ", 1)
-
-      # Remove \n if exists in the text
-      text = text.replace("\n", "")
-      text = text.replace("¾", "3/4")
-      text = text.replace("ß", "B")
-      text = text.replace("—", "-")
-      
-      file = image_id 
-      # file = "-".join(image_id_split[:2])
-
-      # Check if first_part is in files
-      if file.split("_")[0] in files:
-        image_path = images_path + image_id + ".png"
-
-        # Check if image_path exists
-        if os.path.exists(image_path):
-            images_paths.append(image_path)
-            lines.append(text)
-
-  return images_paths, lines
-
-# Dilation class for transform using opencv
 class Dilation(object):
   def __init__(self, kernel_size=3, iterations=1):
     self.kernel = np.ones((kernel_size, kernel_size), np.uint8)
@@ -332,6 +133,44 @@ class Binarization(object):
     _, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     return image
+
+def read_data_1msharada(splits_path: str, label_key: str = 'original_text') -> Tuple[List[str], List[str]]:
+  """
+  Read 1MSharada dataset using a split file containing a JSON array of JSON file paths.
+
+  :param splits_path: Path to split file (train.json/val.json/test.json), each containing a list of JSON annotation file paths
+  :param label_key: Key inside per-sample JSON for the ground-truth text (default: 'original_text')
+  :return: (image_paths, texts)
+  """
+  import json
+
+  image_paths, texts = [], []
+
+  with open(splits_path, 'r', encoding='utf-8') as f:
+    json_files = json.load(f)
+
+  for json_file in json_files:
+    try:
+      with open(json_file, 'r', encoding='utf-8') as jf:
+        data = json.load(jf)
+
+      image_path = data.get('image_path', '')
+      text = data.get(label_key, '')
+
+      if image_path.startswith('./'):
+        image_path = image_path.replace('./data/1MSharada/', '/scratch/tathagata.ghosh/datasets/1MSharada/')
+
+      if os.path.exists(image_path) and isinstance(text, str) and len(text.strip()) > 0:
+        image_paths.append(image_path)
+        texts.append(text)
+      else:
+        # Skip missing files or empty labels silently to keep loader robust
+        pass
+    except Exception:
+      # Skip malformed entries
+      pass
+
+  return image_paths, texts
 
 class Degradations(object):
   def __init__(self, ink_colors: List[str], paths_backgrounds: str):
