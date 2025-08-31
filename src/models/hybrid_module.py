@@ -56,8 +56,8 @@ class HybridModule(LightningModule):
         self.tokenizer = tokenizer
         self.decode = self.tokenizer.detokenize
 
-        # Remove loss functions - we only care about CER
-        # self.criterion = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_id) # 1 is the padding token
+        # Restore CrossEntropyLoss for proper training, remove CTC loss
+        self.criterion = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_id)
         # self.ctc_criterion = torch.nn.CTCLoss(blank=self.net.vocab_size, zero_infinity=True, reduction='mean')
 
         # metric objects for calculating and averaging accuracy across batches
@@ -126,12 +126,15 @@ class HybridModule(LightningModule):
         # Check if outputs is an instance of Hugging Face ModelOutput
         if hasattr(dec_outputs, 'logits'):
           logits = dec_outputs.logits
-          # Use a dummy loss since we removed the actual loss functions
-          loss = torch.tensor(0.0, requires_grad=True, device=images.device)
+          # Use the loss from the model if available, otherwise calculate it
+          if hasattr(dec_outputs, 'loss') and dec_outputs.loss is not None:
+            loss = dec_outputs.loss
+          else:
+            loss = self.criterion(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1))
         else:
           logits = dec_outputs
-          # Use a dummy loss since we removed the actual loss functions
-          loss = torch.tensor(0.0, requires_grad=True, device=images.device)
+          # Calculate CrossEntropyLoss for proper training
+          loss = self.criterion(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1))
 
         # Calculate training CER for the entire batch
         total_cer = 0.0
@@ -165,11 +168,9 @@ class HybridModule(LightningModule):
             # Calculate average CER for the batch
             avg_cer = total_cer / valid_samples if valid_samples > 0 else 0.0
 
-        # Log training CER with multiple methods to ensure it appears in WandB
+        # Log training loss and CER
+        self.log("train/loss", loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         self.log("train/cer", avg_cer, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        
-        # Add a simple test metric to verify logging works
-        self.log("train/test_metric", 0.5, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
         
         # Force log to wandb explicitly using multiple methods
         if hasattr(self, 'loggers') and self.loggers:
