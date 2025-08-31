@@ -198,3 +198,4 @@ logs/
 test_dataset.py
 
 checkpoints/
+wandb/
