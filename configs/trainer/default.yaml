@@ -9,7 +9,7 @@ default_root_dir: ${paths.output_dir}
 
 # Epoch limits
 min_epochs: 1          # prevents early stopping in the first epoch
-max_epochs: 100
+max_epochs: 10
 
 # Device setup – single-GPU by default; other yaml files
 # (e.g. multi_gpu.yaml) can override `devices`
@@ -25,3 +25,6 @@ num_sanity_val_steps: 0
 
 # Make training deterministic / reproducible
 deterministic: False
+
+# Gradient clipping for stability
+gradient_clip_val: 1.0
