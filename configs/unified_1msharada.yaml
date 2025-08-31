@@ -1,0 +1,179 @@
+# Unified configuration for 1MSharada training
+# @package _global_
+
+# Task name and tags
+task_name: "train_1msharada"
+tags: ["1msharada", "10000_samples", "unified_config"]
+
+# Training settings
+train: True
+test: True
+ckpt_path: null
+seed: 42
+
+# Image size: 1800x68
+image_size: [68, 1800]
+
+# Learning rate and training parameters
+learning_rate: 0.0001
+weight_decay: 0.0001
+max_epochs: 10
+batch_size: 32
+gradient_clip_val: 1.0
+
+# Model configuration
+model:
+  _target_: src.models.hybrid_module.HybridModule
+  net:
+    _target_: src.models.components.v_light_barrere.V_Light_Barrere
+    image_size: [68, 1800]
+    hidden_dim: 256
+    intermediate_ffn_dim: 1024
+    dropout: 0.2
+    n_heads: 4
+    encoder_layers: 4
+    decoder_layers: 2
+    char_embedding_size: 256
+    tokenizer: ${tokenizer}
+  
+  optimizer:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0001
+    weight_decay: 0.0001
+  
+  scheduler:
+    _target_: torch.optim.lr_scheduler.SequentialLR
+    _partial_: true
+    milestones: [4000]
+    schedulers:
+      - _target_: torch.optim.lr_scheduler.LinearLR
+        _partial_: true
+        start_factor: 0.001
+        total_iters: 4000
+      - _target_: torch.optim.lr_scheduler.ExponentialLR
+        _partial_: true
+        gamma: 0.999999
+  
+  log_val_metrics: false
+  compile: false
+
+# Data configuration
+data:
+  train_config:
+    _target_: src.data.data_config.DataConfig
+    stage: train
+    img_size: [68, 1800]
+    binarize: true
+    batch_size: 32
+    num_workers: 4
+    pin_memory: true
+    datasets:
+      1msharada:
+        _target_: src.data.data_config.DatasetConfig
+        name: 1msharada
+        images_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        labels_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        splits_path: /scratch/tathagata.ghosh/Very_Lightweight_Transformer/data/1MSharada_splits/train.json
+        read_data: src.data.data_utils.read_data_1msharada
+    transforms:
+      - _target_: torchvision.transforms.ToTensor
+
+  val_config:
+    _target_: src.data.data_config.DataConfig
+    stage: val
+    img_size: [68, 1800]
+    binarize: true
+    batch_size: 32
+    num_workers: 4
+    pin_memory: true
+    datasets:
+      1msharada:
+        _target_: src.data.data_config.DatasetConfig
+        name: 1msharada
+        images_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        labels_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        splits_path: /scratch/tathagata.ghosh/Very_Lightweight_Transformer/data/1MSharada_splits/val.json
+        read_data: src.data.data_utils.read_data_1msharada
+    transforms:
+      - _target_: torchvision.transforms.ToTensor
+
+  test_config:
+    _target_: src.data.data_config.DataConfig
+    stage: test
+    img_size: [68, 1800]
+    binarize: true
+    batch_size: 32
+    num_workers: 4
+    pin_memory: true
+    datasets:
+      1msharada:
+        _target_: src.data.data_config.DatasetConfig
+        name: 1msharada
+        images_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        labels_path: /scratch/tathagata.ghosh/datasets/1MSharada
+        splits_path: /scratch/tathagata.ghosh/Very_Lightweight_Transformer/data/1MSharada_splits/test.json
+        read_data: src.data.data_utils.read_data_1msharada
+    transforms:
+      - _target_: torchvision.transforms.ToTensor
+
+# Tokenizer configuration
+tokenizer:
+  _target_: src.data.components.tokenizers.Tokenizer
+  vocab_file: /scratch/tathagata.ghosh/Very_Lightweight_Transformer/data/sharada_1M_vocab.txt
+  bos_token: "<bos>"
+  eos_token: "<eos>"
+  pad_token: "<pad>"
+  unk_token: "<unk>"
+
+# Trainer configuration
+trainer:
+  _target_: lightning.pytorch.trainer.Trainer
+  default_root_dir: ${paths.output_dir}
+  min_epochs: 1
+  max_epochs: 10
+  accelerator: gpu
+  devices: 1
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: 0
+  deterministic: False
+  gradient_clip_val: 1.0
+
+# Logger configuration
+logger:
+  wandb:
+    _target_: lightning.pytorch.loggers.WandbLogger
+    project: "1msharada_training"
+    name: ${task_name}
+    tags: ${tags}
+    log_model: true
+
+# Paths configuration
+paths:
+  output_dir: ${hydra:runtime.output_dir}
+  data_dir: /scratch/tathagata.ghosh/datasets/1MSharada
+  checkpoint_dir: ${paths.output_dir}/checkpoints
+
+# Callbacks configuration
+callbacks:
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${paths.checkpoint_dir}
+    filename: "1msharada-{epoch:02d}-{val/mean_cer:.4f}"
+    monitor: "val/mean_cer"
+    mode: "min"
+    save_top_k: 3
+    save_last: true
+  
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: "val/mean_cer"
+    mode: "min"
+    patience: 5
+    verbose: true
+
+# Extras configuration
+extras:
+  print_config: true
+  ignore_warnings: true
+  enable_progress_bar: true
