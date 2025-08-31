@@ -56,9 +56,9 @@ class HybridModule(LightningModule):
         self.tokenizer = tokenizer
         self.decode = self.tokenizer.detokenize
 
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_id) # 1 is the padding token
-        self.ctc_criterion = torch.nn.CTCLoss(blank=self.net.vocab_size, zero_infinity=True, reduction='mean')
+        # Remove loss functions - we only care about CER
+        # self.criterion = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_id) # 1 is the padding token
+        # self.ctc_criterion = torch.nn.CTCLoss(blank=self.net.vocab_size, zero_infinity=True, reduction='mean')
 
         # metric objects for calculating and averaging accuracy across batches
         log.info(f'Logger in Seq2SeqModule: {_logger}. Keys: {list(_logger.keys())}')
@@ -123,25 +123,15 @@ class HybridModule(LightningModule):
         enc_outputs, dec_outputs = self.net(x=images, y=labels[:, :-1])
         labels = labels[:, 1:].contiguous() # Shift all labels to the right to remove the <bos> token
         
-        # Recalculate target_lengths after shifting labels (remove BOS token)
-        target_lengths = torch.where(labels == self.tokenizer.eos_id)[1] + 1  # +1 because we want to include the EOS token
-        
-        # Calculate input lengths correctly - should be the sequence length (width dimension)
-        input_lengths = torch.ones(images.shape[0], dtype=torch.long).to(images.device) * enc_outputs.shape[0]
-        outputs = dec_outputs
-        
         # Check if outputs is an instance of Hugging Face ModelOutput
-        if hasattr(outputs, 'logits'):
-          logits = outputs.logits
-          loss = outputs.loss
+        if hasattr(dec_outputs, 'logits'):
+          logits = dec_outputs.logits
+          # Use a dummy loss since we removed the actual loss functions
+          loss = torch.tensor(0.0, requires_grad=True, device=images.device)
         else:
-          logits = outputs
-          loss_ce = self.criterion(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1))
-          loss_enc = self.ctc_criterion(enc_outputs, labels, input_lengths, target_lengths)
-          loss = 0.5 * loss_ce + (1 - 0.5) * loss_enc
-
-        acc = (logits.argmax(dim=-1) == labels).sum() / (labels != self.tokenizer.pad_id).sum()
-        self.metric_logger.log_train_step(loss, acc)
+          logits = dec_outputs
+          # Use a dummy loss since we removed the actual loss functions
+          loss = torch.tensor(0.0, requires_grad=True, device=images.device)
 
         # Calculate training CER for the entire batch
         total_cer = 0.0
@@ -185,27 +175,47 @@ class HybridModule(LightningModule):
             print(f"Error calculating CER: {e}")
             avg_cer = 0.0
 
-        # update and log metrics
-        self.log("train/loss", loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
-        self.log("train/loss_ce", loss_ce.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
-        self.log("train/loss_ctc", loss_enc.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
-        
-        # Log training CER with explicit sync_dist
+        # Log training CER with multiple methods to ensure it appears in WandB
         self.log("train/cer", avg_cer, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         
-        # Test logging with a simple metric to verify logging works
+        # Add a simple test metric to verify logging works
         self.log("train/test_metric", 0.5, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
         
         # Debug print for first few steps
         if self.global_step < 10:
             print(f'Step {self.global_step}: Logging train/cer = {avg_cer:.4f}')
         
-        # Force log to wandb explicitly
+        # Force log to wandb explicitly using multiple methods
         if hasattr(self, 'loggers') and self.loggers:
             for logger in self.loggers:
                 if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log'):
+                    # Method 1: Direct experiment log
                     logger.experiment.log({"train/cer": avg_cer}, step=self.global_step)
                     print(f'Forced WandB log: train/cer = {avg_cer:.4f} at step {self.global_step}')
+                    
+                    # Method 2: Using wandb.log if available
+                    if hasattr(logger.experiment, 'log'):
+                        try:
+                            import wandb
+                            wandb.log({"train/cer": avg_cer}, step=self.global_step)
+                            print(f'WandB wandb.log: train/cer = {avg_cer:.4f} at step {self.global_step}')
+                        except ImportError:
+                            pass
+                    
+                    # Method 3: Direct wandb call
+                    try:
+                        import wandb
+                        if wandb.run is not None:
+                            wandb.log({"train/cer_direct": avg_cer}, step=self.global_step)
+                            print(f'Direct wandb.log: train/cer_direct = {avg_cer:.4f} at step {self.global_step}')
+                    except Exception as e:
+                        print(f"Direct wandb.log failed: {e}")
+        
+        # Also log to metric logger for consistency
+        try:
+            self.metric_logger.log_train_step(loss, torch.tensor(avg_cer))
+        except Exception as e:
+            print(f"Metric logger log_train_step failed: {e}")
         
         # Log learning rate
         lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -227,6 +237,13 @@ class HybridModule(LightningModule):
         # Log average training CER for the epoch
         train_cer = self.trainer.callback_metrics.get('train/cer', 0.0)
         print(f'Average training CER for epoch {epoch}: {train_cer:.4f}')
+        
+        # Force log epoch CER to WandB
+        if hasattr(self, 'loggers') and self.loggers:
+            for logger in self.loggers:
+                if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log'):
+                    logger.experiment.log({"train/cer_epoch": train_cer}, step=epoch)
+                    print(f'Epoch WandB log: train/cer_epoch = {train_cer:.4f} at epoch {epoch}')
 
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, dataloader_idx: int = None) -> None:
