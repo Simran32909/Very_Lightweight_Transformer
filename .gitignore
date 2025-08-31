@@ -199,3 +199,4 @@ test_dataset.py
 
 checkpoints/
 wandb/
+diagnose_cer.py
