@@ -150,7 +150,6 @@ class HybridModule(LightningModule):
                         total_cer += cer
                         valid_samples += 1
                     except Exception as cer_error:
-                        print(f"Error with CER calculation: {cer_error}")
                         # Fallback: simple character-level accuracy
                         if len(_label) > 0:
                             min_len = min(len(_pred), len(_label))
@@ -159,21 +158,12 @@ class HybridModule(LightningModule):
                                 cer = 1.0 - (matches / len(_label))
                                 total_cer += cer
                                 valid_samples += 1
-                    
-                    # Print first few samples for debugging
-                    if batch_idx < 1 and i < 3:
-                        print(f'Label: {_label}. Pred: {_pred}. CER: {cer}')
-            
-            # Calculate average CER for the batch
-            avg_cer = total_cer / valid_samples if valid_samples > 0 else 0.0
-            
-            # Debug print for first few batches
-            if batch_idx < 3:
-                print(f'Batch {batch_idx}: valid_samples={valid_samples}, total_cer={total_cer:.4f}, avg_cer={avg_cer:.4f}')
                 
         except Exception as e:
-            print(f"Error calculating CER: {e}")
             avg_cer = 0.0
+        else:
+            # Calculate average CER for the batch
+            avg_cer = total_cer / valid_samples if valid_samples > 0 else 0.0
 
         # Log training CER with multiple methods to ensure it appears in WandB
         self.log("train/cer", avg_cer, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
@@ -181,41 +171,33 @@ class HybridModule(LightningModule):
         # Add a simple test metric to verify logging works
         self.log("train/test_metric", 0.5, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
         
-        # Debug print for first few steps
-        if self.global_step < 10:
-            print(f'Step {self.global_step}: Logging train/cer = {avg_cer:.4f}')
-        
         # Force log to wandb explicitly using multiple methods
         if hasattr(self, 'loggers') and self.loggers:
             for logger in self.loggers:
                 if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log'):
                     # Method 1: Direct experiment log
                     logger.experiment.log({"train/cer": avg_cer}, step=self.global_step)
-                    print(f'Forced WandB log: train/cer = {avg_cer:.4f} at step {self.global_step}')
                     
                     # Method 2: Using wandb.log if available
-                    if hasattr(logger.experiment, 'log'):
-                        try:
-                            import wandb
-                            wandb.log({"train/cer": avg_cer}, step=self.global_step)
-                            print(f'WandB wandb.log: train/cer = {avg_cer:.4f} at step {self.global_step}')
-                        except ImportError:
-                            pass
+                    try:
+                        import wandb
+                        wandb.log({"train/cer": avg_cer}, step=self.global_step)
+                    except ImportError:
+                        pass
                     
                     # Method 3: Direct wandb call
                     try:
                         import wandb
                         if wandb.run is not None:
                             wandb.log({"train/cer_direct": avg_cer}, step=self.global_step)
-                            print(f'Direct wandb.log: train/cer_direct = {avg_cer:.4f} at step {self.global_step}')
-                    except Exception as e:
-                        print(f"Direct wandb.log failed: {e}")
+                    except Exception:
+                        pass
         
         # Also log to metric logger for consistency
         try:
             self.metric_logger.log_train_step(loss, torch.tensor(avg_cer))
-        except Exception as e:
-            print(f"Metric logger log_train_step failed: {e}")
+        except Exception:
+            pass
         
         # Log learning rate
         lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -236,14 +218,12 @@ class HybridModule(LightningModule):
         
         # Log average training CER for the epoch
         train_cer = self.trainer.callback_metrics.get('train/cer', 0.0)
-        print(f'Average training CER for epoch {epoch}: {train_cer:.4f}')
         
         # Force log epoch CER to WandB
         if hasattr(self, 'loggers') and self.loggers:
             for logger in self.loggers:
                 if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log'):
                     logger.experiment.log({"train/cer_epoch": train_cer}, step=epoch)
-                    print(f'Epoch WandB log: train/cer_epoch = {train_cer:.4f} at epoch {epoch}')
 
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, dataloader_idx: int = None) -> None:
