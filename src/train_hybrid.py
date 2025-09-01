@@ -18,7 +18,7 @@ from src.models.hybrid_module import HybridModule
 
 torch.autograd.set_detect_anomaly(True) 
 
-print(f'Importing modules...')
+        # Importing modules...
 
 from src.utils import (
     RankedLogger,
@@ -60,7 +60,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     # Instantiating tokenizer
     tokenizer = instantiate_tokenizers(cfg.get("tokenizer"))
 
-    print(f'TOKENIZER: {tokenizer}')
+            # TOKENIZER: {tokenizer}
     
 
     # Init data module
@@ -81,7 +81,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     log.info("Setting up DataModule TEST...")
     datamodule.setup(stage="test")
 
-    print(f'Instantiating model...')
+            # Instantiating model...
 
     # Manually instantiate model components to avoid Hydra recursively instantiating data configs
     net = hydra.utils.instantiate(cfg.model.net)
@@ -103,7 +103,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
         tokenizer=tokenizer,
         log_val_metrics=cfg.model.log_val_metrics,
     )
-    print(f'MODEL INSTANTIATED: {model}')
+            # MODEL INSTANTIATED: {model}
 
     # Update wandb logger with model config (allowing value changes to avoid conflicts)
     model_config = OmegaConf.to_object(cfg.model)
@@ -114,13 +114,13 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
 
     # Predict on test set
     log.info("Predicting on test set...")
-    print(f"Full config keys: {list(cfg.keys())}")
+    # Full config keys: {list(cfg.keys())}
     trainer_cfg = cfg.get("trainer")
-    print(f"Trainer config: {trainer_cfg}")
-    print(f"Trainer config type: {type(trainer_cfg)}")
+    # Trainer config: {trainer_cfg}
+    # Trainer config type: {type(trainer_cfg)}
     
     if trainer_cfg is None:
-        print("Trainer config is None - creating default trainer config")
+        # Trainer config is None - creating default trainer config
         trainer_cfg = DictConfig({
             "_target_": "lightning.pytorch.trainer.Trainer",
             "default_root_dir": cfg.paths.output_dir,
@@ -133,17 +133,17 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
             "deterministic": False
         })
     
-    print(f"Trainer config keys: {trainer_cfg.keys() if hasattr(trainer_cfg, 'keys') else 'No keys'}")
+    # Trainer config keys: {trainer_cfg.keys() if hasattr(trainer_cfg, 'keys') else 'No keys'}
     
     try:
         trainer: Trainer = hydra.utils.instantiate(
             trainer_cfg, logger=logger, callbacks=instantiate_callbacks(cfg.get("callbacks"))
         )
-        print(f"Trainer instantiated: {trainer}")
+        # Trainer instantiated: {trainer}
         if trainer is None:
             raise ValueError("Trainer instantiation failed - trainer is None")
     except Exception as e:
-        print(f"Error instantiating trainer: {e}")
+        # Error instantiating trainer: {e}
         raise
 
     # Load from a pretrained_checkpoint
@@ -151,22 +151,23 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, float], Dict[str, Any]]:
     
     # if ckpt_path exists, load the model from the checkpoint
     if ckpt_path is not None and os.path.exists(ckpt_path):
-        print(f'CHECKPOINT PATH EXISTS: {ckpt_path}')
-        print(f'MODEL WILL BE LOADED FROM CHECKPOINT: {model}')
+        # CHECKPOINT PATH EXISTS: {ckpt_path}
+        # MODEL WILL BE LOADED FROM CHECKPOINT: {model}
+        pass
     else:
-        print(f'CHECKPOINT PATH DOES NOT EXIST: {ckpt_path}')
-        print(f'MODEL WILL BE TRAINED FROM SCRATCH: {model}')
+        # CHECKPOINT PATH DOES NOT EXIST: {ckpt_path}
+        # MODEL WILL BE TRAINED FROM SCRATCH: {model}
         ckpt_path = None
       
     model = HybridModule.load_from_checkpoint(ckpt_path, net=model.net, datasets=data_configs, tokenizer=tokenizer) if ckpt_path is not None else model
     # model = torch.compile(model)
 
     if cfg.train is True:
-        print(f'TRAINING MODEL: {model}')
+        # TRAINING MODEL: {model}
         trainer.fit(model, datamodule.train_dataloader(), datamodule.val_dataloader())
         trainer.test(model, datamodule.test_dataloader())
     else:
-        print(f'MODEL WILL NOT BE TRAINED: {model}. Only testing will be performed.')
+        # MODEL WILL NOT BE TRAINED: {model}. Only testing will be performed.
         trainer.validate(model, datamodule.val_dataloader())
         trainer.test(model, datamodule.test_dataloader())
     
@@ -181,7 +182,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     :return: Optional[float] with optimized metric value.
     """
 
-    print(f'Main for training HTR models for HTR!')
+    # Main for training HTR models for HTR!
     extras(cfg)
     # train the model
     _ = train(cfg)
