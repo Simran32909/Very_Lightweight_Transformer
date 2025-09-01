@@ -17,8 +17,8 @@ image_size: [68, 1800]
 # Learning rate and training parameters
 learning_rate: 0.0001
 weight_decay: 0.0001
-max_epochs: 10
-batch_size: 32
+max_epochs: 100
+batch_size: 512
 gradient_clip_val: 1.0
 
 # Model configuration
@@ -30,7 +30,7 @@ model:
     hidden_dim: 256
     intermediate_ffn_dim: 1024
     dropout: 0.2
-    n_heads: 4
+    n_heads: 8
     encoder_layers: 4
     decoder_layers: 2
     char_embedding_size: 256
@@ -39,8 +39,8 @@ model:
   optimizer:
     _target_: torch.optim.Adam
     _partial_: true
-    lr: 0.0001
-    weight_decay: 0.0001
+    lr: 1e-5
+    weight_decay: 0.01
   
   scheduler:
     _target_: torch.optim.lr_scheduler.SequentialLR
@@ -65,8 +65,8 @@ data:
     stage: train
     img_size: [68, 1800]
     binarize: true
-    batch_size: 32
-    num_workers: 4
+    batch_size: 512
+    num_workers: 16
     pin_memory: true
     datasets:
       1msharada:
@@ -84,8 +84,8 @@ data:
     stage: val
     img_size: [68, 1800]
     binarize: true
-    batch_size: 32
-    num_workers: 4
+    batch_size: 512
+    num_workers: 16
     pin_memory: true
     datasets:
       1msharada:
@@ -103,8 +103,8 @@ data:
     stage: test
     img_size: [68, 1800]
     binarize: true
-    batch_size: 32
-    num_workers: 4
+    batch_size: 512
+    num_workers: 16
     pin_memory: true
     datasets:
       1msharada:
@@ -119,12 +119,9 @@ data:
 
 # Tokenizer configuration
 tokenizer:
-  _target_: src.data.components.tokenizers.Tokenizer
+  _target_: src.data.components.tokenizers.CharTokenizer
+  model_name: "sharada_1m"
   vocab_file: /scratch/tathagata.ghosh/Very_Lightweight_Transformer/data/sharada_1M_vocab.txt
-  bos_token: "<bos>"
-  eos_token: "<eos>"
-  pad_token: "<pad>"
-  unk_token: "<unk>"
 
 # Trainer configuration
 trainer:
@@ -143,7 +140,7 @@ trainer:
 logger:
   wandb:
     _target_: lightning.pytorch.loggers.WandbLogger
-    project: "1msharada_training"
+    project: "Very_Lightweight_Transformer"
     name: ${task_name}
     tags: ${tags}
     log_model: true
