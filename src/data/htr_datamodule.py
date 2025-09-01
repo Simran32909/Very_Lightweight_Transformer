@@ -245,7 +245,7 @@ class HTRDataModule(pl.LightningDataModule):
         self.text_transform = tokenizer.tokenize       
 
         # print(f'Constructing HTRDataModule with vocab {self.vocab}')
-        print(f'VOCAB SIZE {self.vocab_size}')
+        # VOCAB SIZE {self.vocab_size}
 
         self.text_transform = tokenizer.prepare_text
 
@@ -260,7 +260,7 @@ class HTRDataModule(pl.LightningDataModule):
     def setup(self, stage: str):
         # print(f'Print train_config transforms: {self.train_config.transforms[0]}')
         self.stage = stage
-        print(f'Setting up stage {stage}...')
+        # Setting up stage {stage}...
 
         if stage == "fit" or stage is None:
             _stages, configs = ["train", "val"], {"train": self.train_config, "val": self.val_config}

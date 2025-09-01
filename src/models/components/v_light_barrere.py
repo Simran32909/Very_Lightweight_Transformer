@@ -33,7 +33,7 @@ class CNN_Encoder(nn.Module):
   def __init__(self, input_shape):
       super(CNN_Encoder, self).__init__()
       self.input_shape = input_shape
-      print(f'input_shape: {input_shape} to LN (first)')
+      # input_shape: {input_shape} to LN (first)
         
       # Separte through layers to get the output
       # Formula to calculate the output shape of a convolutional layer
@@ -42,7 +42,7 @@ class CNN_Encoder(nn.Module):
       self.conv1 = nn.Conv2d(3, 8, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
       self.leaky_relu = nn.LeakyReLU()
       input_shape = (8, int((input_shape[1]-3+2*0)/1+1), int((input_shape[2]-3+2*0)/1+1))
-      print(f'input_shape: {input_shape} to LN')
+      # input_shape: {input_shape} to LN
       
       self.layer_norm1 = nn.LayerNorm(input_shape, elementwise_affine=False)
       self.max_pool1 = nn.MaxPool2d(kernel_size=(2, 2))
@@ -53,7 +53,7 @@ class CNN_Encoder(nn.Module):
       self.conv2 = nn.Conv2d(8, 16, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
       
       input_shape = (16, int((input_shape[1]-3+2*0)/1+1), int((input_shape[2]-3+2*0)/1+1))
-      print(f'input_shape: {input_shape} to LN')
+      # input_shape: {input_shape} to LN
       self.layer_norm2 = nn.LayerNorm(input_shape, elementwise_affine=False)
       self.max_pool2 = nn.MaxPool2d(kernel_size=(2, 2))
       input_shape = (16, input_shape[1]//2, input_shape[2]//2)
@@ -61,7 +61,7 @@ class CNN_Encoder(nn.Module):
       # Block 3
       self.conv3 = nn.Conv2d(16, 32, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
       input_shape = (32, int((input_shape[1]-3+2*0)/1+1), int((input_shape[2]-3+2*0)/1+1))
-      print(f'input_shape: {input_shape} to LN')
+      # input_shape: {input_shape} to LN
       self.layer_norm3 = nn.LayerNorm(input_shape, elementwise_affine=False)
       self.max_pool3 = nn.MaxPool2d(kernel_size=(2, 2))
       input_shape = (32, input_shape[1]//2, input_shape[2]//2)
@@ -69,13 +69,13 @@ class CNN_Encoder(nn.Module):
       # Block 4
       self.conv4 = nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
       input_shape = (64, int((input_shape[1]-3+2*0)/1+1), int((input_shape[2]-3+2*0)/1+1))
-      print(f'input_shape: {input_shape} to LN')
+      # input_shape: {input_shape} to LN
       self.layer_norm4 = nn.LayerNorm(input_shape, elementwise_affine=False)
       
       # Block 5
       self.conv5 = nn.Conv2d(64, 128, kernel_size=(4, 2), stride=(1, 1), padding=(0, 0))
       input_shape = (128, int((input_shape[1]-4+2*0)/1+1), int((input_shape[2]-2+2*0)/1+1))
-      print(f'input_shape: {input_shape} to LN')
+      # input_shape: {input_shape} to LN
       self.layer_norm5 = nn.LayerNorm(input_shape, elementwise_affine=False)
         
   def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -150,7 +150,7 @@ class V_Light_Barrere(nn.Module):
 
       # Calculate image reduction factor with the pooling layers and kernel sizes
       self.img_reduction = (14, 9)
-      print(f'IMAGE REDUCTION FACTOR: {self.img_reduction}')
+      # IMAGE REDUCTION FACTOR: {self.img_reduction}
 
       # Calculate the CNN output size dynamically
       # For the current architecture with kernel_size=(4,2) in conv5
@@ -191,8 +191,8 @@ class V_Light_Barrere(nn.Module):
       cnn_output_channels = 128
       collapse_input_size = cnn_output_height * cnn_output_channels  # 1 * 128 = 128
       
-      print(f"CNN output height: {cnn_output_height}, channels: {cnn_output_channels}")
-      print(f"Collapse layer input size: {collapse_input_size}")
+      # CNN output height: {cnn_output_height}, channels: {cnn_output_channels}
+      # Collapse layer input size: {collapse_input_size}
       
       # Dense layer to collapse the CNN output
       self.collapse_layer = nn.Linear(collapse_input_size, 128)
