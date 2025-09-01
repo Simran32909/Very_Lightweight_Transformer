@@ -44,9 +44,9 @@ class HybridModule(LightningModule):
             self.val_datasets = list(datasets['val_config']['datasets'].keys())
             self.test_datasets = list(datasets['test_config']['datasets'].keys())
 
-        print(f'self.train_datasets: {self.train_datasets}')
-        print(f'self.val_datasets: {self.val_datasets}')
-        print(f'self.test_datasets: {self.test_datasets}')
+        # self.train_datasets: {self.train_datasets}
+        # self.val_datasets: {self.val_datasets}
+        # self.test_datasets: {self.test_datasets}
 
         self.train_cer = CER()
 
@@ -214,7 +214,7 @@ class HybridModule(LightningModule):
         # Log the learning rate for that epoch
         lr = self.trainer.optimizers[0].param_groups[0]['lr']
         epoch = self.current_epoch
-        print(f'Learning rate: {lr} for epoch: {epoch}')
+        # Learning rate: {lr} for epoch: {epoch}
         self.metric_logger.log_learning_rate(lr, epoch)
         
         # Log average training CER for the epoch
@@ -279,7 +279,7 @@ class HybridModule(LightningModule):
         for dataset, val_cer in val_cers.items():
             self.log(f'val/val_cer_{dataset}', val_cer, sync_dist=True, prog_bar=True)
             
-        print(f'mean_val_cer: {mean_val_cer}')
+        # mean_val_cer: {mean_val_cer}
         self.log(f'val/mean_cer', mean_val_cer, sync_dist=True, prog_bar=True)
         self.log(f'val/in_domain_cer', in_domain_cer, sync_dist=True, prog_bar=True)
         self.log(f'val/out_of_domain_cer', out_of_domain_cer, sync_dist=True, prog_bar=True)
@@ -362,12 +362,12 @@ class HybridModule(LightningModule):
 
     def on_test_epoch_end(self) -> None:
         test_cer, test_wer = self.metric_logger.log_test_metrics()
-        print(f'test_cer: {test_cer}')
-        print(f'test_wer: {test_wer}')
+        # test_cer: {test_cer}
+        # test_wer: {test_wer}
 
         test_cer_minus, test_wer_minus = self.metric_logger_minusc.log_test_metrics()
-        print(f'test_cer_minus: {test_cer_minus}')
-        print(f'test_wer_minus: {test_wer_minus}')
+        # test_cer_minus: {test_cer_minus}
+        # test_wer_minus: {test_wer_minus}
 
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
@@ -393,17 +393,17 @@ class HybridModule(LightningModule):
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         log.info(f'Optimizer: {optimizer}')
         # Number of parameters
-        print(f'Number of parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad)}')
+        # Number of parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad)}
         if self.hparams.scheduler is not None:
-            print(f'Using scheduler: {self.hparams.scheduler}')
+            # Using scheduler: {self.hparams.scheduler}
 
             # If the class of the scheduler is SequentialLR, set the optimizer for the scheduler
             if "SequentialLR" in str(self.hparams.scheduler.func):
               schedulers = []
               for i in range(len(self.hparams.scheduler.keywords['schedulers'])):
                 if "LambdaLR" in str(self.hparams.scheduler.keywords['schedulers'][i].func):
-                  print(f'Using LambdaLR')
-                  print(f'Scheduler: {self.hparams.scheduler.keywords["schedulers"][i]}')
+                  # Using LambdaLR
+                  # Scheduler: {self.hparams.scheduler.keywords["schedulers"][i]}
                   # breakpoint()
                   scheduler = self.hparams.scheduler.keywords['schedulers'][i](optimizer=optimizer, lr_lambda=eval(self.hparams.scheduler.keywords['schedulers'][i].keywords["lr_lambda"]))
                 else:
